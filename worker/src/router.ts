@@ -16,19 +16,20 @@ const router = Router<RequestWrapper>();
 router.post('/api/v1/user', async (request) => {
   try {
     let json = (await request.json()) as any;
-    await request.supabaseClient.from('profile').insert({ name: json.name });
-  } catch {
-    // do nothing
+    const { error } = await request.supabaseClient.from('profile').upsert({ name: json.name }, { ignoreDuplicates: true });
+
+    if (error) throw new Error(`Error creating user: ${error}`);
+  } catch (error) {
+    throw new Error(`Error creating user: ${error}`);
   }
 });
 
 router.get('/api/v1/movies/quiz', async (request) => {
   try {
     const movieDetailsList = await Promise.all(movies.map((movie) => fetchMovieDetails(request, movie)));
-    console.log(movieDetailsList.filter((movie) => movie !== undefined)); // Filter out undefined values
     return movieDetailsList;
   } catch (error) {
-    console.error('Error fetching movie details:', error);
+    throw new Error(`Error fetching movie details: ${error}`);
   }
 });
 
@@ -59,11 +60,8 @@ router.post('/api/v1/movies/quiz', async (request) => {
 
   const { data, error } = await request.supabaseClient.from('profile').select('name').eq('name', quizSubmission.name).limit(1);
 
-  if (error) {
-    throw new Error('Error fetching user profile');
-  } else if (!data || data.length === 0) {
-    throw new Error('User profile not found');
-  }
+  if (error) throw new Error(`Error fetching user profile: ${error.message}`);
+  else if (!data || data.length === 0) throw new Error(`User profile not found: ${quizSubmission.name}`);
 
   // Prepare an array of movie quizzes for batch insertion
   const movieQuizzes = quizSubmission.results.map((movieQuiz) => ({
@@ -74,13 +72,62 @@ router.post('/api/v1/movies/quiz', async (request) => {
     status: movieQuiz.status as MovieStatus, // <- Here, cast it to MovieStatus
   }));
 
-  const { data: insertedData, error: insertError } = await request.supabaseClient.from('user_movie').insert(movieQuizzes);
+  const { data: insertedData, error: insertError } = await request.supabaseClient.from('user_movie').upsert(movieQuizzes, {
+    onConflict: 'imdbid, user_name',
+    ignoreDuplicates: false,
+  });
 
-  if (insertError) {
-    throw new Error('Error posting movie quiz, error: ' + insertError.message);
-  }
+  if (insertError) throw new Error(`Error inserting movie quizzes: ${insertError.message}`);
 
   return;
+});
+
+router.post('/api/v1/movies/recs', async (request) => {
+  interface MovieRec {
+    name1: string;
+    name2: number;
+  }
+
+  let jsonData = (await request.json()) as any;
+  const movieRec: MovieRec = {
+    name1: jsonData.name1,
+    name2: jsonData.name2,
+  };
+
+  // Ensure names exist
+  const { data: name1, error: name1error } = await request.supabaseClient
+    .from('profile')
+    .select('name')
+    .eq('name', movieRec.name1)
+    .limit(1);
+
+  if (name1error) throw new Error(`Error fetching user profile for ${movieRec.name1}, error: ${name1error.message}`);
+  else if (!name1 || name1.length === 0) throw new Error(`User profile not found for ${movieRec.name1}`);
+
+  const { data: name2, error: name2error } = await request.supabaseClient
+    .from('profile')
+    .select('name')
+    .eq('name', movieRec.name2)
+    .limit(1);
+
+  if (name2error) throw new Error(`Error fetching user profile for ${movieRec.name2}, error: ${name2error.message}`);
+  else if (!name2 || name2.length === 0) throw new Error(`User profile not found for ${movieRec.name2}`);
+
+  // Get movies for name1
+  const { data: name1Movies, error: name1MoviesError } = await request.supabaseClient
+    .from('user_movie')
+    .select('*')
+    .eq('user_name', movieRec.name1);
+
+  if (name1MoviesError) throw new Error(`Error fetching movies for ${movieRec.name1}, error: ${name1MoviesError.message}`);
+
+  // Get movies for name2
+  const { data: name2Movies, error: name2MoviesError } = await request.supabaseClient
+    .from('user_movie')
+    .select('*')
+    .eq('user_name', movieRec.name2);
+
+  if (name2MoviesError) throw new Error(`Error fetching movies for ${movieRec.name2}, error: ${name2MoviesError.message}`);
 });
 
 // router.get('/api/v1/courses/:id', async (request) => {
