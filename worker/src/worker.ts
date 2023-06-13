@@ -1,32 +1,56 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { createClient } from "@supabase/supabase-js";
+import apiRouter, { RequestWrapper } from "./router";
+import { Database } from "./database.types";
+import { json } from "itty-router";
 
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
+  SUPABASE_SERVICE_ROLE_KEY: string;
+  SUPABASE_URL: string;
+  OPENAI_API_KEY: string;
+  OPENAI_ORG: string;
+  HELICONE_API_KEY: string;
+  OPEN_MOVIE_DATABASE_API_KEY: string;
+  OPEN_MOVIE_DATABASE_URL: string;
 }
 
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
-	},
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
+      let url = new URL(request.url);
+	  console.log(`URL ${url}`)
+      if (url.pathname.startsWith('/api/')) {
+        let requestWrapper = request as RequestWrapper;
+        requestWrapper.env = env;
+        requestWrapper.supabaseClient = createClient<Database>(env.SUPABASE_URL ?? '', env.SUPABASE_SERVICE_ROLE_KEY ?? '');
+
+        return apiRouter
+          .handle(requestWrapper)
+          .then(json)
+          .catch((error: any) => {
+              return errorResponse(error);
+          })
+      }
+
+	  throw new Error("Endpoint not found")
+	} catch (error) {
+      return errorResponse(error);
+    }
+  },
 };
+
+function errorResponse(error: any) {
+	return new Response(
+	  JSON.stringify({
+		"filmwise-message": "FilmWise ran into an error servicing your request: " + error,
+		"filmwise-error": JSON.stringify(error),
+		support: "Please reach out to support@filmwise.ai",
+	  }),
+	  {
+		status: 500,
+		headers: {
+		  "content-type": "application/json;charset=UTF-8",
+		  "helicone-error": "true",
+		},
+	  }
+	);
+  }
