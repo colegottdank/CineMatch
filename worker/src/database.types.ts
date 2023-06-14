@@ -36,12 +36,18 @@ export interface Database {
     Tables: {
       profile: {
         Row: {
+          id: string
+          lowercase_name: string | null
           name: string
         }
         Insert: {
+          id?: string
+          lowercase_name?: string | null
           name: string
         }
         Update: {
+          id?: string
+          lowercase_name?: string | null
           name?: string
         }
       }
@@ -54,7 +60,7 @@ export interface Database {
           status: Database["public"]["Enums"]["movie_status"]
           title: string
           updated_at: string
-          user_name: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -64,7 +70,7 @@ export interface Database {
           status: Database["public"]["Enums"]["movie_status"]
           title: string
           updated_at?: string
-          user_name: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -74,7 +80,7 @@ export interface Database {
           status?: Database["public"]["Enums"]["movie_status"]
           title?: string
           updated_at?: string
-          user_name?: string
+          user_id?: string | null
         }
       }
     }

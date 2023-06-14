@@ -16,10 +16,10 @@ const router = Router<RequestWrapper>();
 
 router.get('/api/v1/user', async (request) => {
     try {
-        const { data, error } = await request.supabaseClient.from('profile').select('name');
+        const { data, error } = await request.supabaseClient.from('profile').select('*');
     
         if (error) throw new Error(`Error fetching user profile: ${error.message}`);
-        else if (!data || data.length === 0) throw new Error(`User profile not found: ${request.user?.email}`);
+        else if (!data || data.length === 0) return [];
     
         return data;
     } catch (error) {
@@ -30,7 +30,7 @@ router.get('/api/v1/user', async (request) => {
 router.post('/api/v1/user', async (request) => {
   try {
     let json = (await request.json()) as any;
-    const { error } = await request.supabaseClient.from('profile').upsert({ name: json.name }, { ignoreDuplicates: true });
+    const { error } = await request.supabaseClient.from('profile').upsert({ name: json.name, lowercase_name: json.name.toLowerCase() }, { ignoreDuplicates: true });
 
     if (error) throw new Error(`Error creating user: ${error}`);
   } catch (error) {
@@ -47,7 +47,7 @@ router.get('/api/v1/movies/quiz', async (request) => {
   }
 });
 
-router.post('/api/v1/movies/quiz', async (request) => {
+router.post('/api/v1/movies', async (request) => {
   interface MovieQuiz {
     title: string;
     rating: number;
@@ -68,18 +68,18 @@ router.post('/api/v1/movies/quiz', async (request) => {
       title: result.title,
       rating: result.rating,
       imbdID: result.imbdID,
-      status: MovieStatus.Watched,
+      status: result.status
     })),
   };
 
-  const { data, error } = await request.supabaseClient.from('profile').select('name').eq('name', quizSubmission.name).limit(1);
+  const { data, error } = await request.supabaseClient.from('profile').select('*').eq('lowercase_name', quizSubmission.name.toLowerCase()).limit(1);
 
   if (error) throw new Error(`Error fetching user profile: ${error.message}`);
   else if (!data || data.length === 0) throw new Error(`User profile not found: ${quizSubmission.name}`);
 
   // Prepare an array of movie quizzes for batch insertion
   const movieQuizzes = quizSubmission.results.map((movieQuiz) => ({
-    user_name: quizSubmission.name,
+    user_id: data[0].id,
     title: movieQuiz.title,
     rating: movieQuiz.rating,
     imdbid: movieQuiz.imbdID, // Note: changed imbdID to imdbid to match the expected key
@@ -87,7 +87,7 @@ router.post('/api/v1/movies/quiz', async (request) => {
   }));
 
   const { data: insertedData, error: insertError } = await request.supabaseClient.from('user_movie').upsert(movieQuizzes, {
-    onConflict: 'imdbid, user_name',
+    onConflict: 'imdbid, user_id',
     ignoreDuplicates: false,
   });
 
@@ -99,7 +99,7 @@ router.post('/api/v1/movies/quiz', async (request) => {
 router.post('/api/v1/movies/recs', async (request) => {
   interface MovieRec {
     name1: string;
-    name2: number;
+    name2: string;
   }
 
   let jsonData = (await request.json()) as any;
@@ -109,29 +109,29 @@ router.post('/api/v1/movies/recs', async (request) => {
   };
 
   // Ensure names exist
-  const { data: name1, error: name1error } = await request.supabaseClient
+  const { data: profile1, error: name1error } = await request.supabaseClient
     .from('profile')
-    .select('name')
-    .eq('name', movieRec.name1)
+    .select('*')
+    .eq('lowercase_name', movieRec.name1.toLowerCase())
     .limit(1);
 
   if (name1error) throw new Error(`Error fetching user profile for ${movieRec.name1}, error: ${name1error.message}`);
-  else if (!name1 || name1.length === 0) throw new Error(`User profile not found for ${movieRec.name1}`);
+  else if (!profile1 || profile1.length === 0) throw new Error(`User profile not found for ${movieRec.name1}`);
 
-  const { data: name2, error: name2error } = await request.supabaseClient
+  const { data: profile2, error: name2error } = await request.supabaseClient
     .from('profile')
-    .select('name')
-    .eq('name', movieRec.name2)
+    .select('*')
+    .eq('lowercase_name', movieRec.name2.toLowerCase())
     .limit(1);
 
   if (name2error) throw new Error(`Error fetching user profile for ${movieRec.name2}, error: ${name2error.message}`);
-  else if (!name2 || name2.length === 0) throw new Error(`User profile not found for ${movieRec.name2}`);
+  else if (!profile2 || profile2.length === 0) throw new Error(`User profile not found for ${movieRec.name2}`);
 
   // Get movies for name1
   const { data: name1Movies, error: name1MoviesError } = await request.supabaseClient
     .from('user_movie')
     .select('*')
-    .eq('user_name', movieRec.name1);
+    .eq('user_id', profile1[0].id);
 
   if (name1MoviesError) throw new Error(`Error fetching movies for ${movieRec.name1}, error: ${name1MoviesError.message}`);
 
@@ -139,7 +139,7 @@ router.post('/api/v1/movies/recs', async (request) => {
   const { data: name2Movies, error: name2MoviesError } = await request.supabaseClient
     .from('user_movie')
     .select('*')
-    .eq('user_name', movieRec.name2);
+    .eq('user_id', profile2[0].id);
 
   if (name2MoviesError) throw new Error(`Error fetching movies for ${movieRec.name2}, error: ${name2MoviesError.message}`);
 
