@@ -14,6 +14,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.25.0",
     "axios": "^1.4.0",
-    "itty-router": "^4.0.9"
+    "gpt-tokenizer": "^2.1.1",
+    "itty-router": "^4.0.9",
+    "langchain": "^0.0.94"
   }
 }

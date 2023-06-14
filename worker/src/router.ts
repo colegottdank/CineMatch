@@ -3,6 +3,7 @@ import { Env } from './worker';
 import { SupabaseClient, User } from '@supabase/supabase-js';
 import { Database } from './database.types';
 import { MovieStatus } from './MovieStatus';
+import { OpenAIClient } from './OpenAIClient';
 
 export type RequestWrapper = {
   env: Env;
@@ -12,6 +13,19 @@ export type RequestWrapper = {
 
 const router = Router<RequestWrapper>();
 // router.all('*', authenticate);
+
+router.get('/api/v1/user', async (request) => {
+    try {
+        const { data, error } = await request.supabaseClient.from('profile').select('name');
+    
+        if (error) throw new Error(`Error fetching user profile: ${error.message}`);
+        else if (!data || data.length === 0) throw new Error(`User profile not found: ${request.user?.email}`);
+    
+        return data;
+    } catch (error) {
+        throw new Error(`Error fetching user profile: ${error}`);
+    }
+});
 
 router.post('/api/v1/user', async (request) => {
   try {
@@ -128,6 +142,41 @@ router.post('/api/v1/movies/recs', async (request) => {
     .eq('user_name', movieRec.name2);
 
   if (name2MoviesError) throw new Error(`Error fetching movies for ${movieRec.name2}, error: ${name2MoviesError.message}`);
+
+  const name1MoviesJson = {
+    name: movieRec.name1,
+    movies: name1Movies?.map(movie => ({
+      title: movie.title,
+      rating: movie.rating,
+      status: movie.status
+    }))
+  };
+  
+  // Convert name2Movies to desired format
+  const name2MoviesJson = {
+    name: movieRec.name2,
+    movies: name2Movies?.map(movie => ({
+      title: movie.title,
+      rating: movie.rating,
+      status: movie.status
+    }))
+  };
+  
+  const combinedJson = {
+    person1: name1MoviesJson,
+    person2: name2MoviesJson
+  };
+
+  let client = new OpenAIClient(request);
+  let movies = await client.createMovieRecommendation(combinedJson);
+
+  const movieDetailsList : any = await Promise.all(movies.map((movie) => fetchMovieDetails(request, movie)));
+  movieDetailsList[0]["rationale1"] = movies[0].rationale1;
+  movieDetailsList[0]["rationale2"] = movies[0].rationale2;
+  movieDetailsList[1]["rationale1"] = movies[1].rationale1;
+  movieDetailsList[1]["rationale2"] = movies[1].rationale2;
+
+  return movieDetailsList;
 });
 
 // router.get('/api/v1/courses/:id', async (request) => {
