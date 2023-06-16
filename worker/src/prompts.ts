@@ -62,6 +62,7 @@ Ensure:
 - The rationale for each recommendation is in the style of Will Ferrell, starting with the person's name.
 - Each movie recommendation must have 1 rationale for each person.
 - The rationale is creative, fun, and no more than two sentences long.
+- Ensure only 2 movies are recommended.
 - If the movies are not good recommendations, too generic, too common, not personalized enough, pick better movies.
 
 The response should be structured as follows:
