@@ -1,6 +1,12 @@
 import { IMovieRec, MovieRec } from './MovieRec';
-import { rec_prompt } from './prompts';
+import { rec_prompt, rec_prompt2, rec_prompt_improve } from './prompts';
 import { RequestWrapper } from './router';
+export const gpt4 = 'gpt-4';
+export const gpt4MaxTokens = 8192;
+export const gpt35 = 'gpt-3.5-turbo';
+export const gpt35MaxTokens = 4096;
+export const gpt3516k = 'gpt-3.5-turbo-16k';
+export const gpt3516kMaxTokens = 16384;
 
 export class OpenAIClient {
   private chatClient: any;
@@ -38,60 +44,113 @@ export class OpenAIClient {
   }
 
   public async createMovieRecommendation(combinedJson: any): Promise<MovieRec[]> {
-    await this.loadChatClient();
-    const { HumanChatMessage, SystemChatMessage } = await this.loadLangchainSchema();
-    let messages = [
-      new SystemChatMessage(rec_prompt),
-      new HumanChatMessage(`People to generate 2 movie recommendations for: ${JSON.stringify(combinedJson)}`),
+    const initialSettings: ChatClientSettings = {
+      modelName: 'gpt-4',
+      temperature: 1,
+    };
+
+    const chatClient = await this.loadChatClient();
+
+    const langchainSchema = await this.loadLangchainSchema();
+    const initialMessages = [
+      new langchainSchema.SystemChatMessage(rec_prompt2),
+      new langchainSchema.HumanChatMessage(`People to generate 2 movie recommendations for: ${JSON.stringify(combinedJson)}`),
     ];
 
-    let gpt_tokenizer = await import("gpt-tokenizer");
-    const tokens = gpt_tokenizer.encode(JSON.stringify(messages));
+    let movies = await this.getMovieRecommendations(chatClient, initialMessages, initialSettings);
+    
+    const improvementSettings: ChatClientSettings = {
+      modelName: 'gpt-4',
+      temperature: 1,
+    };
 
-    //8192
-    this.chatClient.maxTokens = 8192 - tokens.length;
-    this.chatClient.modelName = "gpt-4";
-    this.chatClient.temperature = 0.5;
+    const improvementMessages = [
+      new langchainSchema.SystemChatMessage(rec_prompt_improve),
+      new langchainSchema.HumanChatMessage(
+        `Here are the people we are recommending movies for: ${JSON.stringify(
+          combinedJson
+        )}. Here is the previous recommendation: ${JSON.stringify(movies)}`
+      ),
+    ];
+
+    return await this.getMovieRecommendations(chatClient, improvementMessages, improvementSettings);
+  }
+
+  private async getMovieRecommendations(chatClient: any, messages: any[], settings: ChatClientSettings): Promise<MovieRec[]> {
+    await this.applyChatClientSettings(chatClient, settings, messages);
 
     let moviesJson = '';
-    let response;
-    try{
-        response = await this.chatClient.call(messages);
-    }
-    catch(error) {
-        throw error;
-    }
-
     try {
-      moviesJson = response.text.substring(response.text.indexOf('['), response.text.lastIndexOf(']') + 1);
-      let moviesArray = JSON.parse(moviesJson);
-      let movies = moviesArray.map((movieJson: IMovieRec) => new MovieRec(movieJson));
-
-      movies.forEach((movie: MovieRec) => {
-        movie.validate();
-      });
-      return movies;
-    } catch (error: any) {
-      const { HumanChatMessage } = await this.loadLangchainSchema();
-      this.chatClient.modelName = 'gpt-3.5-turbo';
-      this.chatClient.maxTokens = 4000;
-      const fixedResponse = await this.chatClient.call([
-        new HumanChatMessage(
-          'Please fix and return just the json that may or may not be invalid. Do not return anything that is not JSON.' +
-            error.message +
-            'JSON to fix: ' +
-            moviesJson
-        ),
-      ]);
-      moviesJson = fixedResponse.text.substring(fixedResponse.text.indexOf('['), fixedResponse.text.lastIndexOf(']') + 1);
-      let moviesArray = JSON.parse(moviesJson);
-      let movies = moviesArray.map((movieJson: IMovieRec) => new MovieRec(movieJson));
-
-      movies.forEach((movie: MovieRec) => {
-        movie.validate();
-      });
-
-      return movies;
+      const response = await chatClient.call(messages);
+      moviesJson = this.extractJsonFromResponse(response.text);
+    } catch (error) {
+      moviesJson = await this.fixAndParseJson(chatClient, error, moviesJson);
     }
+
+    const moviesArray = JSON.parse(moviesJson);
+    return moviesArray.map((movieJson: IMovieRec) => {
+      const movie = new MovieRec(movieJson);
+      movie.validate();
+      return movie;
+    });
   }
+
+  private async applyChatClientSettings(chatClient: any, settings: ChatClientSettings, messages: any[]) {
+    chatClient.modelName = settings.modelName;
+    chatClient.temperature = settings.temperature;
+    chatClient.maxTokens = await this.calculateMaxTokens(settings, messages);
+  }
+
+  private async calculateMaxTokens(settings: ChatClientSettings, messages: any[]): Promise<number> {
+    const gpt_tokenizer = await import('gpt-tokenizer');
+    const encodedMessageLength = gpt_tokenizer.encode(JSON.stringify(messages)).length;
+    let modelMaxTokens: number;
+
+    switch (settings.modelName) {
+      case gpt4:
+        modelMaxTokens = gpt4MaxTokens;
+        break;
+      case gpt35:
+        modelMaxTokens = gpt35MaxTokens;
+        break;
+      case gpt3516k:
+        modelMaxTokens = gpt3516kMaxTokens;
+        break;
+      default:
+        throw new Error(`Unknown model name: ${settings.modelName}`);
+    }
+
+    settings.maxTokens = modelMaxTokens - encodedMessageLength;
+    return settings.maxTokens;
+  }
+
+  private extractJsonFromResponse(responseText: string): string {
+    return responseText.substring(responseText.indexOf('['), responseText.lastIndexOf(']') + 1);
+  }
+
+  private async fixAndParseJson(chatClient: any, error: any, json: string): Promise<string> {
+    const fixedSettings: ChatClientSettings = {
+      modelName: 'gpt-3.5-turbo',
+      temperature: 1,
+    };
+
+    const langchainSchema = await this.loadLangchainSchema();
+    const fixedMessage = new langchainSchema.HumanChatMessage(
+      'Please fix and return just the json that may or may not be invalid. Do not return anything that is not JSON.' +
+        error.message +
+        'JSON to fix: ' +
+        json
+    );
+
+    this.applyChatClientSettings(chatClient, fixedSettings, [fixedMessage]);
+
+    const fixedResponse = await chatClient.call([fixedMessage]);
+    return this.extractJsonFromResponse(fixedResponse.text);
+  }
+}
+
+interface ChatClientSettings {
+  modelName: string;
+  temperature: number;
+  maxTokens?: number; // This is optional, as it will be set in calculateMaxTokens
 }
