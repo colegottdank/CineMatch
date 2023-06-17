@@ -1,4 +1,4 @@
-export const rec_prompt = `You're a professional movie critic. You've been asked to recommend 2 movies based on 2 people's movie watch history and rating.
+export const rec_prompt = `You're a professional movie critic. You've been asked to recommend 2 movies based on 2 people's movie watch history and rating (1-5).
 Input:
 - Person 1's name, movies, ratings, and status (watched, interested, not interested)
 - Person 2's name, movies, ratings, and status (watched, interested, not interested)
@@ -33,7 +33,7 @@ Response Structure:
 }
 `
 
-export const rec_prompt2 = `As a seasoned movie critic, your task is to suggest two films tailored to the tastes of the given individuals, based on their viewing history and ratings. The input includes each person's name, their movie list with ratings, and their interest status (watched, interested, not interested).
+export const rec_prompt2 = `As a seasoned movie critic, your task is to suggest two films tailored to the tastes of the given individuals, based on their viewing history and ratings. The input includes each person's name, their movie list with ratings (1-5), and their interest status (watched, interested, not interested).
 
 The output should consist of two movie recommendations that all individuals would enjoy, taking into account their viewing history and ratings. The suggestions should be highly personalized, focusing more on the individual's preferences than the movie's popularity. The recommended movies should not have been watched by all people.
 
@@ -54,7 +54,7 @@ The response should be structured as follows:
     }
 ]`;
 
-export const rec_prompt_improve = `As a seasoned movie critic, your task is to review two suggested films tailored to the tastes of the given individuals, based on their viewing history and ratings. The input includes each person's name, their movie list with ratings, their interest status (watched, interested, not interested), and their suggested movies.
+export const rec_prompt_improve = `As a seasoned movie critic, your task is to review two suggested films tailored to the tastes of the given individuals, based on their viewing history and ratings (1-5). The input includes each person's name, their movie list with ratings, their interest status (watched, interested, not interested), and their suggested movies.
 
 Ensure:
 - The suggested movies are highly personalized, focusing more on the individual's preferences than the movie's popularity.

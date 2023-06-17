@@ -54,7 +54,7 @@ export class OpenAIClient {
     const langchainSchema = await this.loadLangchainSchema();
     const initialMessages = [
       new langchainSchema.SystemChatMessage(rec_prompt2),
-      new langchainSchema.HumanChatMessage(`People to generate 2 movie recommendations for: ${JSON.stringify(combinedJson)}`),
+      new langchainSchema.HumanChatMessage(`People to generate 2 movie recommendations for: ${combinedJson}`),
     ];
 
     let movies = await this.getMovieRecommendations(chatClient, initialMessages, initialSettings);
@@ -66,9 +66,8 @@ export class OpenAIClient {
     const improvementMessages = [
       new langchainSchema.SystemChatMessage(rec_prompt_improve),
       new langchainSchema.HumanChatMessage(
-        `Here are the people we are recommending movies for: ${JSON.stringify(
-          combinedJson
-        )}. Here is the previous recommendation: ${JSON.stringify(movies)}`
+        `Here are the people we are recommending movies for: ${combinedJson}. 
+        Here is the previous recommendation: ${JSON.stringify(movies)}`
       ),
     ];
 

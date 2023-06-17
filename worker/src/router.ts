@@ -102,7 +102,7 @@ router.post('/api/v1/movies', async (request) => {
 
   const quizSubmission: QuizSubmission = {
     name: jsonData.name,
-    results: jsonData.results.map(result => ({
+    results: jsonData.results.map((result) => ({
       title: result.title,
       rating: result.rating,
       imdbID: result.imdbID,
@@ -142,9 +142,7 @@ router.post('/api/v1/movies/recs', async (request) => {
     profiles.push(await getUserProfile(request.supabaseClient, name));
   }
 
-  const combinedJson: { persons: MovieRec[] } = {
-    persons: [],
-  };
+  const tabularData = [];
 
   for (const profile of profiles) {
     // Get movies for current profile
@@ -152,20 +150,25 @@ router.post('/api/v1/movies/recs', async (request) => {
 
     if (moviesError) throw new Error(`Error fetching movies for ${profile.name}, error: ${moviesError.message}`);
 
-    const moviesJson: MovieRec = {
-      name: profile.name,
-      movies: movies.map((movie) => ({
-        title: movie.title,
-        rating: movie.rating,
-        status: movie.status,
-      })),
-    };
+    // Adding person's name as a section header
+    tabularData.push(`\nName: ${profile.name}`);
+    // Adding column headers for the movies
+    tabularData.push('Title, Rating, Status');
 
-    combinedJson.persons.push(moviesJson);
+    // Adding movies for this person
+    for (const movie of movies) {
+      const row = `"${movie.title}", ${movie.rating}, ${movie.status}`;
+      tabularData.push(row);
+    }
+
+    // Adding an empty line to separate sections
+    tabularData.push('');
   }
 
+  const csvString = tabularData.join('\n');
+
   let client = new OpenAIClient(request);
-  let movies = await client.createMovieRecommendation(combinedJson);
+  let movies = await client.createMovieRecommendation(csvString);
 
   const movieDetailsList: any = await Promise.all(movies.map((movie) => fetchMovieDetails(request, movie)));
   for (let i = 0; i < movieDetailsList.length; i++) {
@@ -208,11 +211,7 @@ async function fetchMovieDetails(request: RequestWrapper, movie: any) {
 }
 
 async function getUserProfile(client: any, name: string) {
-  const { data, error } = await client
-    .from('profile')
-    .select('*')
-    .eq('lowercase_name', name.toLowerCase())
-    .limit(1);
+  const { data, error } = await client.from('profile').select('*').eq('lowercase_name', name.toLowerCase()).limit(1);
 
   if (error) throw new Error(`Error fetching user profile: ${error.message}`);
   if (!data || data.length === 0) throw new Error(`User profile not found: ${name}`);
