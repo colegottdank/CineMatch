@@ -58,7 +58,6 @@ export class OpenAIClient {
     ];
 
     let movies = await this.getMovieRecommendations(chatClient, initialMessages, initialSettings);
-    
     const improvementSettings: ChatClientSettings = {
       modelName: 'gpt-4',
       temperature: 1,
