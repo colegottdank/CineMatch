@@ -1,1 +1,2 @@
-Movie recommendation app using generative AI
+# CineMatch
+A platform for collecting user movie ratings and recommending the optimal movie to watch via LLM
